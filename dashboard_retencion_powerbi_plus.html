@@ -1,0 +1,1067 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Power BI‑Style Dashboard+ · Retención Académica (CSV → JSON)</title>
+
+  <!-- Libraries -->
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <script src="https://cdn.plot.ly/plotly-2.30.0.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+  <style>
+    :root{
+      --bg:#f4f6f8;
+      --surface:#ffffff;
+      --surface-2:#fbfcfd;
+      --stroke:#e5eaf0;
+      --stroke-2:#d7dde6;
+      --text:#111827;
+      --muted:#5b6676;
+      --accent:#1a73e8;
+      --accent-2:#0b57d0;
+      --good:#0f9d58;
+      --warn:#f29900;
+      --bad:#d93025;
+      --shadow: 0 8px 24px rgba(17,24,39,.08);
+      --radius: 14px;
+      --font: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji";
+    }
+    *{ box-sizing:border-box; }
+    body{ margin:0; font-family: var(--font); background: var(--bg); color: var(--text); }
+
+    .frame{ display:grid; grid-template-columns: 270px 1fr; min-height: 100vh; }
+
+    /* Left nav */
+    .nav{
+      background: var(--surface);
+      border-right: 1px solid var(--stroke);
+      padding: 14px 12px;
+      position: sticky; top:0; height: 100vh; overflow:auto;
+    }
+    .brand{ display:flex; gap:10px; align-items:center; padding:10px 10px 14px; border-bottom: 1px solid var(--stroke); margin-bottom: 12px; }
+    .logo{ width:34px; height:34px; border-radius:10px; background: linear-gradient(135deg, var(--accent), var(--accent-2)); box-shadow: 0 10px 18px rgba(26,115,232,.25); }
+    .brand .t{ display:flex; flex-direction:column; line-height:1.1; }
+    .brand .t b{ font-size:13px; letter-spacing:.2px; }
+    .brand .t span{ font-size:12px; color: var(--muted); }
+
+    .nav h4{ margin: 14px 10px 8px; font-size:11px; color: var(--muted); text-transform: uppercase; letter-spacing: .12em; }
+    .nav .card{ background: var(--surface-2); border: 1px solid var(--stroke); border-radius: var(--radius); padding: 10px; margin: 10px; }
+
+    .control{ margin-bottom:10px; }
+    label{ display:block; font-size:12px; color: var(--muted); margin-bottom:6px; }
+    select, input[type="file"]{ width:100%; padding: 10px 10px; border-radius: 10px; border: 1px solid var(--stroke-2); background: var(--surface); color: var(--text); outline:none; }
+    select:disabled, input:disabled{ opacity:.6; }
+
+    .btn{
+      width:100%; border-radius: 10px; border: 1px solid var(--stroke-2);
+      padding: 10px 10px; background: var(--surface);
+      cursor:pointer; font-weight: 800; font-size: 12.5px;
+      transition: transform .05s ease, background .2s ease, border-color .2s ease;
+    }
+    .btn:hover{ background: #f7f9fb; border-color: #cfd6e2; }
+    .btn:active{ transform: translateY(1px); }
+    .btn-primary{ background: linear-gradient(180deg, rgba(26,115,232,.12), rgba(26,115,232,.06)); border-color: rgba(26,115,232,.35); color: #0b2e6f; }
+    .btn-primary:hover{ background: linear-gradient(180deg, rgba(26,115,232,.16), rgba(26,115,232,.08)); }
+    .btn-good{ border-color: rgba(15,157,88,.35); background: rgba(15,157,88,.06); }
+    .btn-warn{ border-color: rgba(242,153,0,.35); background: rgba(242,153,0,.06); }
+
+    .help{ font-size:12px; color: var(--muted); line-height:1.45; }
+    .pill{ display:inline-block; padding: 2px 8px; border-radius: 999px; background: rgba(26,115,232,.10); border: 1px solid rgba(26,115,232,.20); color: #0b2e6f; font-size: 11px; font-weight: 900; }
+
+    /* Main */
+    .main{ padding: 14px 16px 20px; display:flex; flex-direction:column; gap: 12px; }
+
+    .ribbon{
+      background: var(--surface); border: 1px solid var(--stroke);
+      border-radius: var(--radius); box-shadow: var(--shadow);
+      padding: 12px 14px; display:flex; align-items:flex-start; justify-content:space-between; gap: 10px;
+    }
+    .ribbon .left{ display:flex; flex-direction:column; gap: 8px; }
+    .ribbon .left h1{ font-size: 16px; margin:0; letter-spacing: .2px; }
+    .ribbon .left p{ margin:0; font-size: 12px; color: var(--muted); max-width: 900px; line-height: 1.35; }
+
+    .tabs{ display:flex; gap:8px; flex-wrap: wrap; }
+    .tab{
+      border: 1px solid var(--stroke-2);
+      background: var(--surface);
+      padding: 8px 10px;
+      border-radius: 999px;
+      cursor:pointer;
+      font-size: 12px;
+      font-weight: 900;
+      color: var(--muted);
+      transition: background .2s ease, border-color .2s ease, color .2s ease;
+    }
+    .tab:hover{ background: #f7f9fb; }
+    .tab.active{
+      color: #0b2e6f;
+      border-color: rgba(26,115,232,.35);
+      background: rgba(26,115,232,.10);
+    }
+
+    .ribbon .right{ display:flex; align-items:center; gap: 10px; flex-wrap: wrap; justify-content:flex-end; }
+    .chip{ padding: 8px 10px; border-radius: 999px; border: 1px solid var(--stroke); background: #fbfcfe; font-size: 12px; color: var(--muted); white-space: nowrap; }
+    .chip b{ color: var(--text); }
+
+    /* KPIs */
+    .kpis{ display:grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 12px; }
+    .kpi{
+      background: var(--surface); border: 1px solid var(--stroke); border-radius: var(--radius);
+      box-shadow: var(--shadow); padding: 12px 14px; position: relative; overflow:hidden;
+    }
+    .kpi:before{ content:""; position:absolute; left:0; top:0; bottom:0; width: 4px; background: linear-gradient(180deg, var(--accent), var(--accent-2)); opacity:.9; }
+    .kpi .label{ font-size:12px; color: var(--muted); }
+    .kpi .value{ font-size: 26px; font-weight: 900; margin-top: 6px; letter-spacing:.2px; }
+    .kpi .delta{ margin-top: 6px; font-size: 12px; font-weight: 900; }
+    .delta.good{ color: var(--good); }
+    .delta.bad{ color: var(--bad); }
+    .delta.neutral{ color: var(--muted); }
+    .kpi .hint{ font-size: 12px; color: var(--muted); margin-top: 4px; }
+
+    /* Layout */
+    .grid{ display:grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px; }
+
+    .viz{
+      background: var(--surface); border: 1px solid var(--stroke); border-radius: var(--radius);
+      box-shadow: var(--shadow); overflow:hidden;
+    }
+    .vizhead{
+      padding: 10px 12px; border-bottom: 1px solid var(--stroke);
+      display:flex; align-items:center; justify-content:space-between; gap: 10px;
+      background: linear-gradient(180deg, #ffffff, #fbfcfd);
+    }
+    .vizhead h3{ margin:0; font-size: 13px; letter-spacing: .2px; display:flex; align-items:center; gap:8px; }
+    .vizhead .tools{ display:flex; gap: 8px; align-items:center; }
+    .toolbtn{
+      border: 1px solid var(--stroke-2); background: var(--surface);
+      padding: 7px 9px; border-radius: 10px; cursor:pointer;
+      font-size: 12px; font-weight: 900; color: var(--muted);
+    }
+    .toolbtn:hover{ background: #f7f9fb; }
+
+    /* Tooltip icon */
+    .info{
+      width: 18px; height: 18px; border-radius: 999px;
+      display:inline-flex; align-items:center; justify-content:center;
+      border: 1px solid var(--stroke-2);
+      color: var(--muted);
+      font-weight: 900;
+      font-size: 12px;
+      position: relative;
+      cursor: default;
+      background: var(--surface);
+    }
+    .info:hover{ background:#f7f9fb; }
+    .info[data-tip]:hover::after{
+      content: attr(data-tip);
+      position:absolute;
+      left: 0;
+      top: 24px;
+      min-width: 260px;
+      max-width: 360px;
+      padding: 10px 10px;
+      border-radius: 12px;
+      border: 1px solid var(--stroke);
+      background: var(--surface);
+      color: var(--text);
+      box-shadow: var(--shadow);
+      font-size: 12px;
+      font-weight: 600;
+      line-height: 1.35;
+      z-index: 50;
+      white-space: normal;
+    }
+
+    .plot{ width:100%; height: 340px; }
+    .plot.tall{ height: 420px; }
+
+    /* Insights panel */
+    .insights{
+      background: var(--surface);
+      border: 1px solid var(--stroke);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      overflow:hidden;
+    }
+    .insights .vizhead{ border-bottom: 1px solid var(--stroke); }
+    .insights ul{
+      margin: 0;
+      padding: 10px 18px 14px 28px;
+      color: var(--text);
+      font-size: 12.5px;
+      line-height: 1.45;
+    }
+    .insights li{ margin: 6px 0; }
+    .insights b{ color: #0b2e6f; }
+
+    /* Matrix */
+    .tablewrap{
+      background: var(--surface); border: 1px solid var(--stroke); border-radius: var(--radius);
+      box-shadow: var(--shadow); overflow:hidden;
+    }
+    table{ width:100%; border-collapse: collapse; font-size: 12px; }
+    thead th{ text-align:left; padding: 10px 12px; background: #fbfcfd; border-bottom: 1px solid var(--stroke); color: var(--muted); font-weight: 900; letter-spacing: .02em; }
+    tbody td{ padding: 10px 12px; border-bottom: 1px solid var(--stroke); color: var(--text); vertical-align: top; }
+    tbody tr:hover td{ background: #f7f9fb; }
+
+    .tag{
+      padding: 2px 8px; border-radius: 999px; font-weight: 900; font-size: 11px;
+      display:inline-block; border: 1px solid var(--stroke); background: #fbfcfd; color: var(--muted);
+    }
+    .tag.good{ color: var(--good); border-color: rgba(15,157,88,.30); background: rgba(15,157,88,.06); }
+    .tag.warn{ color: var(--warn); border-color: rgba(242,153,0,.35); background: rgba(242,153,0,.06); }
+    .tag.bad{ color: var(--bad); border-color: rgba(217,48,37,.30); background: rgba(217,48,37,.06); }
+
+    /* Page sections */
+    .page{ display:none; }
+    .page.active{ display:block; }
+
+    @media (max-width: 1120px){
+      .frame{ grid-template-columns: 1fr; }
+      .nav{ position: relative; height:auto; }
+      .kpis{ grid-template-columns: repeat(2, minmax(0,1fr)); }
+      .grid{ grid-template-columns: 1fr; }
+      .plot{ height: 320px; }
+      .plot.tall{ height: 380px; }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="frame">
+    <aside class="nav">
+      <div class="brand">
+        <div class="logo"></div>
+        <div class="t">
+          <b>Panel Institucional</b>
+          <span>Retención Académica</span>
+        </div>
+      </div>
+
+      <h4>Datos</h4>
+      <div class="card">
+        <div class="control">
+          <label for="csvFile">Cargar CSV</label>
+          <input type="file" id="csvFile" accept=".csv" />
+        </div>
+        <button class="btn btn-primary" id="btnLoadSample">Cargar dataset ejemplo</button>
+        <div style="height:10px"></div>
+        <button class="btn btn-good" id="btnTemplate">Descargar plantilla CSV</button>
+        <div style="height:10px"></div>
+        <button class="btn btn-warn" id="btnDownloadJSON" disabled>Descargar JSON (resultado)</button>
+        <div style="height:12px"></div>
+        <div class="help"><span class="pill">CSV → JSON</span><br/>Valida columnas mínimas y actualiza visualizaciones al instante.</div>
+      </div>
+
+      <h4>Segmentación (Slicers)</h4>
+      <div class="card">
+        <div class="control">
+          <label for="fYear">Año académico</label>
+          <select id="fYear" disabled></select>
+        </div>
+        <div class="control">
+          <label for="fPeriodo">Período</label>
+          <select id="fPeriodo" disabled></select>
+        </div>
+        <div class="control">
+          <label for="fPrograma">Programa</label>
+          <select id="fPrograma" disabled></select>
+        </div>
+        <button class="btn" id="btnReset" disabled>Restablecer filtros</button>
+        <div style="height:10px"></div>
+        <button class="btn btn-primary" id="btnExportPDF" disabled>Exportar reporte (PDF)</button>
+      </div>
+
+      <h4>Validación</h4>
+      <div class="card">
+        <div id="validationBox" class="help">Carga un CSV para ver la validación de estructura y tipos.</div>
+      </div>
+    </aside>
+
+    <main class="main">
+      <section class="ribbon">
+        <div class="left">
+          <h1>Dashboard de Retención Académica · Power BI‑Style +</h1>
+          <p>Incluye páginas (tabs), tooltips ejecutivos e “insights” automáticos (hallazgos) según los filtros activos.</p>
+          <div class="tabs" role="tablist" aria-label="Páginas">
+            <button class="tab active" data-page="overview">Overview</button>
+            <button class="tab" data-page="riesgo">Riesgo</button>
+            <button class="tab" data-page="desempeno">Desempeño</button>
+          </div>
+        </div>
+        <div class="right">
+          <div class="chip" id="statusChip"><b>Estado:</b> esperando CSV</div>
+          <div class="chip" id="rowsChip"><b>Filas:</b> —</div>
+          <div class="chip" id="filtersChip"><b>Filtros:</b> Ninguno</div>
+        </div>
+      </section>
+
+      <section class="kpis">
+        <div class="kpi">
+          <div class="label">Matriculados (total)</div>
+          <div class="value" id="kpiEnrolled">—</div>
+          <div class="delta neutral" id="kpiEnrolledDelta">—</div>
+          <div class="hint">Suma de estudiantes_matriculados</div>
+        </div>
+        <div class="kpi">
+          <div class="label">Retención promedio</div>
+          <div class="value" id="kpiRet">—</div>
+          <div class="delta neutral" id="kpiRetDelta">—</div>
+          <div class="hint">Promedio de tasa_retencion</div>
+        </div>
+        <div class="kpi">
+          <div class="label">Deserción promedio</div>
+          <div class="value" id="kpiDrop">—</div>
+          <div class="delta neutral" id="kpiDropDelta">—</div>
+          <div class="hint">Promedio de tasa_desercion</div>
+        </div>
+        <div class="kpi">
+          <div class="label">% grupos en riesgo alto</div>
+          <div class="value" id="kpiRiskHigh">—</div>
+          <div class="delta neutral" id="kpiRiskHighDelta">—</div>
+          <div class="hint">Proporción de riesgo_academico = Alto</div>
+        </div>
+      </section>
+
+      <!-- Overview page -->
+      <section class="page active" id="page-overview">
+        <section class="grid" id="dashboard-overview">
+          <div class="viz">
+            <div class="vizhead">
+              <h3>1) Evolución de la Tasa de Retención
+                <span class="info" data-tip="Muestra la retención promedio por período (y año). Útil para detectar meses críticos y evaluar estabilidad institucional.">i</span>
+              </h3>
+              <div class="tools"><button class="toolbtn" onclick="downloadChartPNG('ch_ret')">PNG</button></div>
+            </div>
+            <div id="ch_ret" class="plot"></div>
+          </div>
+
+          <div class="viz">
+            <div class="vizhead">
+              <h3>2) Tasa de Deserción por Programa
+                <span class="info" data-tip="Compara la deserción promedio por programa. Ayuda a priorizar intervenciones y recursos académicos donde el impacto es mayor.">i</span>
+              </h3>
+              <div class="tools"><button class="toolbtn" onclick="downloadChartPNG('ch_drop_prog')">PNG</button></div>
+            </div>
+            <div id="ch_drop_prog" class="plot"></div>
+          </div>
+
+          <div class="viz">
+            <div class="vizhead">
+              <h3>6) Matrícula vs Activos (impacto)
+                <span class="info" data-tip="Traduce el problema a números absolutos: cuánto se inscribe vs cuánto permanece activo. Ideal para comités ejecutivos.">i</span>
+              </h3>
+              <div class="tools"><button class="toolbtn" onclick="downloadChartPNG('ch_enr_act')">PNG</button></div>
+            </div>
+            <div id="ch_enr_act" class="plot"></div>
+          </div>
+
+          <div class="insights">
+            <div class="vizhead">
+              <h3>Insights automáticos (según filtros)
+                <span class="info" data-tip="Estos hallazgos se generan automáticamente a partir de los datos filtrados. Puedes copiarlos como conclusiones para tu informe.">i</span>
+              </h3>
+              <div class="tools">
+                <button class="toolbtn" onclick="copyInsights()">Copiar</button>
+              </div>
+            </div>
+            <ul id="insightsList">
+              <li>Carga un CSV para generar insights.</li>
+            </ul>
+          </div>
+        </section>
+
+        <section class="tablewrap" style="margin-top:12px">
+          <div class="vizhead">
+            <h3>Matriz resumen (tipo Power BI)
+              <span class="info" data-tip="Tabla ejecutiva con el detalle por año, período y programa. Útil para respaldar hallazgos y anexos.">i</span>
+            </h3>
+            <div class="tools">
+              <button class="toolbtn" onclick="downloadTableCSV()">CSV</button>
+              <button class="toolbtn" onclick="exportTablePNG()">PNG</button>
+            </div>
+          </div>
+          <div style="overflow:auto">
+            <table id="matrixTable">
+              <thead>
+                <tr>
+                  <th>Año</th><th>Período</th><th>Programa</th>
+                  <th>Matrícula</th><th>Activos</th><th>Desertaron</th>
+                  <th>Retención %</th><th>Deserción %</th>
+                  <th>Asistencia %</th><th>Nota</th><th>Riesgo</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+
+      <!-- Riesgo page -->
+      <section class="page" id="page-riesgo">
+        <section class="grid" id="dashboard-riesgo">
+          <div class="viz">
+            <div class="vizhead">
+              <h3>4) Mapa de Calor de Riesgo Académico
+                <span class="info" data-tip="Mapa por programa y período. Permite identificar concentración de riesgo (Bajo/Medio/Alto) y patrones recurrentes.">i</span>
+              </h3>
+              <div class="tools"><button class="toolbtn" onclick="downloadChartPNG('ch_heat')">PNG</button></div>
+            </div>
+            <div id="ch_heat" class="plot tall"></div>
+          </div>
+
+          <div class="viz">
+            <div class="vizhead">
+              <h3>5) Distribución de Riesgo Académico
+                <span class="info" data-tip="Distribución global de grupos por nivel de riesgo. Útil como indicador ejecutivo de salud académica.">i</span>
+              </h3>
+              <div class="tools"><button class="toolbtn" onclick="downloadChartPNG('ch_risk')">PNG</button></div>
+            </div>
+            <div id="ch_risk" class="plot tall"></div>
+          </div>
+        </section>
+
+        <section class="insights" style="margin-top:12px">
+          <div class="vizhead">
+            <h3>Recomendaciones rápidas (basadas en riesgo)
+              <span class="info" data-tip="Sugerencias accionables basadas en el patrón de riesgo observado.">i</span>
+            </h3>
+          </div>
+          <ul id="riskReco">
+            <li>Carga un CSV para generar recomendaciones.</li>
+          </ul>
+        </section>
+      </section>
+
+      <!-- Desempeño page -->
+      <section class="page" id="page-desempeno">
+        <section class="grid" id="dashboard-desempeno">
+          <div class="viz">
+            <div class="vizhead">
+              <h3>3) Asistencia vs Nota (tamaño = matrícula)
+                <span class="info" data-tip="Relaciona compromiso (asistencia) y desempeño (nota). Los puntos grandes representan más estudiantes matriculados.">i</span>
+              </h3>
+              <div class="tools"><button class="toolbtn" onclick="downloadChartPNG('ch_scatter')">PNG</button></div>
+            </div>
+            <div id="ch_scatter" class="plot tall"></div>
+          </div>
+
+          <div class="insights">
+            <div class="vizhead">
+              <h3>Lectura del desempeño
+                <span class="info" data-tip="Interpretación automática enfocada en relación asistencia-nota y posibles focos de intervención.">i</span>
+              </h3>
+            </div>
+            <ul id="perfReco">
+              <li>Carga un CSV para generar lectura de desempeño.</li>
+            </ul>
+          </div>
+        </section>
+      </section>
+    </main>
+  </div>
+
+<script>
+  // ----------------------------
+  // Schema
+  // ----------------------------
+  const REQUIRED_COLS = [
+    "anio_academico","periodo","period_number","period_date","programa","group_id",
+    "estudiantes_matriculados","estudiantes_activos","estudiantes_desertaron",
+    "tasa_desercion","tasa_retencion","asistencia_promedio","nota_promedio","riesgo_academico"
+  ];
+  const NUMERIC_COLS = [
+    "anio_academico","period_number","estudiantes_matriculados","estudiantes_activos","estudiantes_desertaron",
+    "tasa_desercion","tasa_retencion","asistencia_promedio","nota_promedio"
+  ];
+
+  let rawData = [];
+  let filtered = [];
+  let insightsText = "";
+
+  // Utilities
+  const byId = (id)=>document.getElementById(id);
+  const uniq = (arr)=>Array.from(new Set(arr)).filter(v=>v!=="" && v!==null && v!==undefined);
+  const num = (v)=>(v===null || v===undefined || v==="") ? NaN : Number(v);
+  const safeMean = (arr)=>{
+    const xs = arr.filter(v=>Number.isFinite(v));
+    return xs.length ? xs.reduce((a,b)=>a+b,0)/xs.length : NaN;
+  };
+  const corr = (xs, ys)=>{
+    const pairs = xs.map((x,i)=>[x,ys[i]]).filter(([x,y])=>Number.isFinite(x)&&Number.isFinite(y));
+    if(pairs.length < 3) return NaN;
+    const x = pairs.map(p=>p[0]), y=pairs.map(p=>p[1]);
+    const mx = safeMean(x), my=safeMean(y);
+    const cov = x.reduce((a,xi,i)=>a+((xi-mx)*(y[i]-my)),0);
+    const vx = x.reduce((a,xi)=>a+((xi-mx)**2),0);
+    const vy = y.reduce((a,yi)=>a+((yi-my)**2),0);
+    if(vx===0 || vy===0) return NaN;
+    return cov / Math.sqrt(vx*vy);
+  };
+
+  const fmt = {
+    int:(x)=> (Number.isFinite(x) ? x.toLocaleString() : "—"),
+    pct:(x)=> (Number.isFinite(x) ? `${x.toFixed(1)}%` : "—"),
+    num1:(x)=> (Number.isFinite(x) ? x.toFixed(1) : "—")
+  };
+
+  const PLOT_LAYOUT_BASE = {
+    paper_bgcolor: "rgba(0,0,0,0)",
+    plot_bgcolor: "rgba(0,0,0,0)",
+    font: {family: "Segoe UI, system-ui, sans-serif", color:"#111827", size: 12},
+    margin: {l:52,r:16,t:8,b:52},
+    xaxis: {gridcolor:"#e9eef5", zerolinecolor:"#e9eef5", linecolor:"#d7dde6"},
+    yaxis: {gridcolor:"#e9eef5", zerolinecolor:"#e9eef5", linecolor:"#d7dde6"},
+    legend: {orientation:"h", y:-0.25}
+  };
+
+  function setChips(){
+    byId("rowsChip").innerHTML = `<b>Filas:</b> ${rawData.length || "—"}`;
+    const y = byId("fYear").value, p = byId("fPeriodo").value, pr = byId("fPrograma").value;
+    const parts = [];
+    if(y && y!=="__ALL__") parts.push(`Año=${y}`);
+    if(p && p!=="__ALL__") parts.push(`Período=${p}`);
+    if(pr && pr!=="__ALL__") parts.push(`Programa=${pr}`);
+    byId("filtersChip").innerHTML = `<b>Filtros:</b> ${parts.length ? parts.join(" · ") : "Ninguno"}`;
+  }
+  function setStatus(msg){ byId("statusChip").innerHTML = `<b>Estado:</b> ${msg}`; }
+  function validationReport(html){ byId("validationBox").innerHTML = html; }
+
+  function enableUI(){
+    ["fYear","fPeriodo","fPrograma","btnReset","btnExportPDF","btnDownloadJSON"].forEach(id=>byId(id).disabled=false);
+  }
+  function disableUI(){
+    ["fYear","fPeriodo","fPrograma","btnReset","btnExportPDF","btnDownloadJSON"].forEach(id=>byId(id).disabled=true);
+  }
+
+  function populateSelect(id, values, allLabel){
+    const sel = byId(id);
+    sel.innerHTML = "";
+    const all = document.createElement("option");
+    all.value="__ALL__"; all.textContent=allLabel;
+    sel.appendChild(all);
+    values.forEach(v=>{
+      const opt=document.createElement("option");
+      opt.value=v; opt.textContent=v;
+      sel.appendChild(opt);
+    });
+  }
+
+  // CSV validation
+  function analyzeAndValidate(data){
+    const cols = Object.keys(data[0] || {});
+    const missing = REQUIRED_COLS.filter(c => !cols.includes(c));
+
+    const issues = [];
+    for(const c of NUMERIC_COLS){
+      const sample = data.slice(0, Math.min(20, data.length)).map(r=>r[c]);
+      const bad = sample.filter(v => v!=="" && v!==null && v!==undefined && !Number.isFinite(num(v)));
+      if(bad.length) issues.push(`Columna <b>${c}</b>: valores no numéricos en muestra (${bad.slice(0,3).join(", ")}${bad.length>3?"…":""}).`);
+    }
+    const dateBad = data.slice(0, Math.min(20, data.length)).filter(r => isNaN(new Date(r.period_date).getTime()));
+    if(dateBad.length) issues.push(`Columna <b>period_date</b>: fechas no válidas en muestra.`);
+
+    let report = `<b>Columnas encontradas (${cols.length}):</b><br/>${cols.join(", ")}<br/><br/>`;
+    report += missing.length
+      ? `<span style="color:#d93025"><b>Faltan columnas requeridas:</b> ${missing.join(", ")}</span><br/>`
+      : `<span style="color:#0f9d58"><b>Estructura mínima:</b> OK ✅</span><br/>`;
+    report += issues.length
+      ? `<br/><b>Observaciones de tipos:</b><br/>• ${issues.join("<br/>• ")}`
+      : `<br/><span style="color:#0f9d58"><b>Tipos (muestra):</b> OK ✅</span>`;
+
+    validationReport(report);
+    return { ok: missing.length===0 };
+  }
+
+  function normalizeTypes(data){
+    return data.map(r=>{
+      const o={...r};
+      NUMERIC_COLS.forEach(c=>o[c]=Number(o[c]));
+      o.periodo=String(o.periodo);
+      o.programa=String(o.programa);
+      o.group_id=String(o.group_id);
+      o.riesgo_academico=String(o.riesgo_academico);
+      o.period_date=String(o.period_date);
+      return o;
+    });
+  }
+
+  function loadCSVFile(file){
+    setStatus("leyendo CSV…");
+    Papa.parse(file,{
+      header:true,
+      skipEmptyLines:true,
+      complete:(res)=>{
+        const data=res.data||[];
+        if(!data.length){ setStatus("CSV vacío"); return; }
+        const check=analyzeAndValidate(data);
+        if(!check.ok){ disableUI(); setStatus("estructura incompleta"); return; }
+
+        rawData=normalizeTypes(data);
+        filtered=[...rawData];
+        enableUI();
+
+        populateSelect("fYear", uniq(rawData.map(d=>d.anio_academico)).sort(), "Todos los años");
+        populateSelect("fPeriodo", uniq(rawData.map(d=>d.periodo)), "Todos los períodos");
+        populateSelect("fPrograma", uniq(rawData.map(d=>d.programa)), "Todos los programas");
+
+        setStatus("CSV cargado ✅");
+        setChips();
+        renderAll();
+      },
+      error:(err)=> setStatus(`error: ${err}`)
+    });
+  }
+
+  // Filters
+  function applyFilters(){
+    const y=byId("fYear").value, p=byId("fPeriodo").value, pr=byId("fPrograma").value;
+    filtered = rawData.filter(d=>{
+      const okY = (y==="__ALL__") || String(d.anio_academico)===String(y);
+      const okP = (p==="__ALL__") || String(d.periodo)===String(p);
+      const okPr = (pr==="__ALL__") || String(d.programa)===String(pr);
+      return okY && okP && okPr;
+    });
+    setChips();
+    renderAll();
+  }
+
+  // KPI deltas
+  function kpiDelta(current, baseline){
+    if(!Number.isFinite(current) || !Number.isFinite(baseline)) return {txt:"—", cls:"neutral"};
+    const diff = current - baseline;
+    const sign = diff>0 ? "↑" : diff<0 ? "↓" : "→";
+    const cls = diff>0 ? "good" : diff<0 ? "bad" : "neutral";
+    return {txt:`${sign} ${Math.abs(diff).toFixed(1)} pts vs año previo`, cls};
+  }
+
+  function renderKPIs(){
+    const enrolled = filtered.map(d=>d.estudiantes_matriculados).filter(Number.isFinite).reduce((a,b)=>a+b,0);
+    const ret = safeMean(filtered.map(d=>d.tasa_retencion));
+    const drop = safeMean(filtered.map(d=>d.tasa_desercion));
+    const riskHigh = filtered.length ? (filtered.filter(d=>String(d.riesgo_academico).toLowerCase()==="alto").length/filtered.length)*100 : NaN;
+
+    // baseline logic
+    const selectedYear = byId("fYear").value;
+    let baseRet=NaN, baseDrop=NaN, baseRisk=NaN, baseEnr=NaN;
+
+    if(selectedYear !== "__ALL__"){
+      const y = Number(selectedYear);
+      const prev = rawData.filter(d=>d.anio_academico===y-1);
+      if(prev.length){
+        const p=byId("fPeriodo").value, pr=byId("fPrograma").value;
+        const prevFiltered = prev.filter(d=>{
+          const okP = (p==="__ALL__") || String(d.periodo)===String(p);
+          const okPr = (pr==="__ALL__") || String(d.programa)===String(pr);
+          return okP && okPr;
+        });
+        baseEnr = prevFiltered.map(d=>d.estudiantes_matriculados).filter(Number.isFinite).reduce((a,b)=>a+b,0);
+        baseRet = safeMean(prevFiltered.map(d=>d.tasa_retencion));
+        baseDrop = safeMean(prevFiltered.map(d=>d.tasa_desercion));
+        baseRisk = prevFiltered.length ? (prevFiltered.filter(d=>String(d.riesgo_academico).toLowerCase()==="alto").length/prevFiltered.length)*100 : NaN;
+      }
+    } else {
+      const years = uniq(filtered.map(d=>d.anio_academico)).sort();
+      if(years.length>=2){
+        const yMin = Number(years[0]), yMax=Number(years[years.length-1]);
+        const cur = filtered.filter(d=>d.anio_academico===yMax);
+        const prev = filtered.filter(d=>d.anio_academico===yMin);
+        baseEnr = prev.map(d=>d.estudiantes_matriculados).filter(Number.isFinite).reduce((a,b)=>a+b,0);
+        baseRet = safeMean(prev.map(d=>d.tasa_retencion));
+        baseDrop = safeMean(prev.map(d=>d.tasa_desercion));
+        baseRisk = prev.length ? (prev.filter(d=>String(d.riesgo_academico).toLowerCase()==="alto").length/prev.length)*100 : NaN;
+      }
+    }
+
+    byId("kpiEnrolled").textContent = fmt.int(enrolled);
+    byId("kpiRet").textContent = fmt.pct(ret);
+    byId("kpiDrop").textContent = fmt.pct(drop);
+    byId("kpiRiskHigh").textContent = Number.isFinite(riskHigh) ? `${riskHigh.toFixed(1)}%` : "—";
+
+    const d1 = kpiDelta(enrolled, baseEnr);
+    const d2 = kpiDelta(ret, baseRet);
+    const d3 = kpiDelta(drop, baseDrop);
+    const d4 = kpiDelta(riskHigh, baseRisk);
+
+    byId("kpiEnrolledDelta").textContent = d1.txt;
+    byId("kpiEnrolledDelta").className = `delta ${d1.cls}`;
+    byId("kpiRetDelta").textContent = d2.txt;
+    byId("kpiRetDelta").className = `delta ${d2.cls}`;
+    byId("kpiDropDelta").textContent = d3.txt;
+    byId("kpiDropDelta").className = `delta ${ (Number.isFinite(drop)&&Number.isFinite(baseDrop) && drop<baseDrop) ? "good" : (Number.isFinite(drop)&&Number.isFinite(baseDrop) && drop>baseDrop) ? "bad" : "neutral" }`;
+    byId("kpiRiskHighDelta").textContent = d4.txt;
+    byId("kpiRiskHighDelta").className = `delta ${ (Number.isFinite(riskHigh)&&Number.isFinite(baseRisk) && riskHigh<baseRisk) ? "good" : (Number.isFinite(riskHigh)&&Number.isFinite(baseRisk) && riskHigh>baseRisk) ? "bad" : "neutral" }`;
+  }
+
+  // Charts (6 total)
+  function renderCharts(){
+    const sorted=[...filtered].sort((a,b)=>new Date(a.period_date)-new Date(b.period_date));
+    const xDates=uniq(sorted.map(d=>d.period_date)).sort((a,b)=>new Date(a)-new Date(b));
+    const years=uniq(sorted.map(d=>d.anio_academico)).sort();
+
+    // 1) Retention evolution
+    const traces1 = years.map(y=>{
+      const ys = xDates.map(dt=>{
+        const rows=sorted.filter(r=>r.anio_academico===y && r.period_date===dt);
+        return safeMean(rows.map(r=>r.tasa_retencion));
+      });
+      return {x:xDates, y:ys, mode:"lines+markers", name:String(y), line:{width:3}};
+    });
+    Plotly.newPlot("ch_ret", traces1, {
+      ...PLOT_LAYOUT_BASE,
+      xaxis:{...PLOT_LAYOUT_BASE.xaxis, title:"Período (fecha)", tickangle:-15},
+      yaxis:{...PLOT_LAYOUT_BASE.yaxis, title:"Retención (%)", rangemode:"tozero"}
+    }, {displayModeBar:false, responsive:true});
+
+    // 2) Dropout by program
+    const programs=uniq(filtered.map(d=>d.programa));
+    const dropAvg = programs.map(p=> safeMean(filtered.filter(d=>d.programa===p).map(d=>d.tasa_desercion)));
+    Plotly.newPlot("ch_drop_prog", [{
+      type:"bar", x: programs, y: dropAvg,
+      text: dropAvg.map(v=>Number.isFinite(v)?v.toFixed(1)+"%":"—"), textposition:"auto"
+    }], {
+      ...PLOT_LAYOUT_BASE,
+      xaxis:{...PLOT_LAYOUT_BASE.xaxis, title:"Programa", tickangle:-15},
+      yaxis:{...PLOT_LAYOUT_BASE.yaxis, title:"Deserción promedio (%)", rangemode:"tozero"}
+    }, {displayModeBar:false, responsive:true});
+
+    // 3) Scatter attendance vs grade
+    const scatterTraces = programs.map(p=>{
+      const rows=filtered.filter(d=>d.programa===p);
+      return {
+        type:"scatter", mode:"markers", name:p,
+        x: rows.map(r=>r.asistencia_promedio),
+        y: rows.map(r=>r.nota_promedio),
+        text: rows.map(r=>`Año: ${r.anio_academico}<br>Período: ${r.periodo}<br>Matrícula: ${r.estudiantes_matriculados}`),
+        marker:{ size: rows.map(r=> Math.max(12, Math.min(40, r.estudiantes_matriculados*1.2))), opacity:.85,
+          line:{width:1, color:"rgba(17,24,39,.15)"} }
+      };
+    });
+    Plotly.newPlot("ch_scatter", scatterTraces, {
+      ...PLOT_LAYOUT_BASE,
+      xaxis:{...PLOT_LAYOUT_BASE.xaxis, title:"Asistencia promedio (%)", range:[70,100]},
+      yaxis:{...PLOT_LAYOUT_BASE.yaxis, title:"Nota promedio", range:[65,100]}
+    }, {displayModeBar:false, responsive:true});
+
+    // 4) Heatmap risk
+    const periodOrder=["Enero","Mayo","Septiembre"];
+    const riskMap={"Bajo":1,"Medio":2,"Alto":3};
+    const z = programs.map(p=> periodOrder.map(per=>{
+      const rows=filtered.filter(d=>d.programa===p && d.periodo===per);
+      const counts={};
+      rows.forEach(r=>{ const k=r.riesgo_academico; counts[k]=(counts[k]||0)+1; });
+      const top=Object.entries(counts).sort((a,b)=>b[1]-a[1])[0]?.[0];
+      return top ? riskMap[top] : null;
+    }));
+    Plotly.newPlot("ch_heat", [{
+      type:"heatmap", x: periodOrder, y: programs, z: z, zmin:1, zmax:3,
+      colorscale:[[0,"#e8f0fe"],[0.5,"#fdecc8"],[1,"#fde7e9"]],
+      hovertemplate:"Programa: %{y}<br>Período: %{x}<br>Nivel: %{z}<extra></extra>",
+      colorbar:{title:"Riesgo (1=Bajo, 2=Medio, 3=Alto)"}
+    }], {
+      ...PLOT_LAYOUT_BASE,
+      margin:{l:130,r:16,t:8,b:52},
+      xaxis:{...PLOT_LAYOUT_BASE.xaxis, title:"Período"},
+      yaxis:{...PLOT_LAYOUT_BASE.yaxis, title:"Programa"}
+    }, {displayModeBar:false, responsive:true});
+
+    // 5) Risk distribution
+    const riskCats=["Bajo","Medio","Alto"];
+    const riskCounts = riskCats.map(rc=> filtered.filter(d=>d.riesgo_academico===rc).length);
+    Plotly.newPlot("ch_risk", [{
+      type:"bar", x: riskCats, y: riskCounts, text: riskCounts, textposition:"auto"
+    }], {
+      ...PLOT_LAYOUT_BASE,
+      xaxis:{...PLOT_LAYOUT_BASE.xaxis, title:"Riesgo académico"},
+      yaxis:{...PLOT_LAYOUT_BASE.yaxis, title:"Cantidad de grupos", rangemode:"tozero"}
+    }, {displayModeBar:false, responsive:true});
+
+    // 6) Enrolled vs active
+    const enr = programs.map(p=> filtered.filter(d=>d.programa===p).reduce((a,b)=>a+(Number.isFinite(b.estudiantes_matriculados)?b.estudiantes_matriculados:0),0));
+    const act = programs.map(p=> filtered.filter(d=>d.programa===p).reduce((a,b)=>a+(Number.isFinite(b.estudiantes_activos)?b.estudiantes_activos:0),0));
+    Plotly.newPlot("ch_enr_act", [
+      {type:"bar", name:"Matriculados", x: programs, y: enr},
+      {type:"bar", name:"Activos", x: programs, y: act}
+    ], {
+      ...PLOT_LAYOUT_BASE,
+      barmode:"group",
+      xaxis:{...PLOT_LAYOUT_BASE.xaxis, title:"Programa", tickangle:-15},
+      yaxis:{...PLOT_LAYOUT_BASE.yaxis, title:"Estudiantes (suma)", rangemode:"tozero"}
+    }, {displayModeBar:false, responsive:true});
+  }
+
+  // Table
+  function riskTag(r){
+    const v=String(r||"").toLowerCase();
+    if(v==="bajo") return `<span class="tag good">Bajo</span>`;
+    if(v==="medio") return `<span class="tag warn">Medio</span>`;
+    if(v==="alto") return `<span class="tag bad">Alto</span>`;
+    return `<span class="tag">—</span>`;
+  }
+
+  function renderTable(){
+    const tb = byId("matrixTable").querySelector("tbody");
+    tb.innerHTML = "";
+    const rows = [...filtered].sort((a,b)=>{
+      if(a.anio_academico!==b.anio_academico) return a.anio_academico-b.anio_academico;
+      if(a.period_number!==b.period_number) return a.period_number-b.period_number;
+      return String(a.programa).localeCompare(String(b.programa));
+    });
+    rows.forEach(r=>{
+      const tr=document.createElement("tr");
+      tr.innerHTML = `
+        <td>${r.anio_academico}</td><td>${r.periodo}</td><td>${r.programa}</td>
+        <td>${fmt.int(r.estudiantes_matriculados)}</td><td>${fmt.int(r.estudiantes_activos)}</td><td>${fmt.int(r.estudiantes_desertaron)}</td>
+        <td>${fmt.pct(r.tasa_retencion)}</td><td>${fmt.pct(r.tasa_desercion)}</td>
+        <td>${fmt.num1(r.asistencia_promedio)}</td><td>${fmt.num1(r.nota_promedio)}</td>
+        <td>${riskTag(r.riesgo_academico)}</td>
+      `;
+      tb.appendChild(tr);
+    });
+  }
+
+  // ----------------------------
+  // Insights & recommendations
+  // ----------------------------
+  function renderInsights(){
+    const list = byId("insightsList");
+    const riskReco = byId("riskReco");
+    const perfReco = byId("perfReco");
+
+    if(!filtered.length){
+      list.innerHTML = "<li>No hay datos con los filtros actuales.</li>";
+      riskReco.innerHTML = "<li>No hay datos con los filtros actuales.</li>";
+      perfReco.innerHTML = "<li>No hay datos con los filtros actuales.</li>";
+      insightsText = "";
+      return;
+    }
+
+    // Insight 1: highest dropout program (avg)
+    const programs = uniq(filtered.map(d=>d.programa));
+    const dropByProg = programs.map(p=>{
+      const rows = filtered.filter(d=>d.programa===p);
+      return {p, v: safeMean(rows.map(r=>r.tasa_desercion))};
+    }).sort((a,b)=>(b.v||0)-(a.v||0));
+    const topDrop = dropByProg[0];
+
+    // Insight 2: lowest retention period (avg)
+    const periods = uniq(filtered.map(d=>d.periodo));
+    const retByPer = periods.map(per=>{
+      const rows = filtered.filter(d=>d.periodo===per);
+      return {per, v: safeMean(rows.map(r=>r.tasa_retencion))};
+    }).sort((a,b)=>(a.v||999)-(b.v||999));
+    const lowRet = retByPer[0];
+
+    // Insight 3: correlation attendance vs grade
+    const r = corr(filtered.map(d=>d.asistencia_promedio), filtered.map(d=>d.nota_promedio));
+    const rTxt = Number.isFinite(r) ? r.toFixed(2) : "—";
+    const rQual = !Number.isFinite(r) ? "no concluyente" : (Math.abs(r)>=0.6 ? "fuerte" : Math.abs(r)>=0.3 ? "moderada" : "débil");
+
+    // Supporting stats
+    const highRiskPct = (filtered.filter(d=>String(d.riesgo_academico).toLowerCase()==="alto").length / filtered.length)*100;
+    const dropAvg = safeMean(filtered.map(d=>d.tasa_desercion));
+    const retAvg = safeMean(filtered.map(d=>d.tasa_retencion));
+
+    const items = [
+      `El programa con mayor deserción promedio es <b>${topDrop?.p || "—"}</b> con <b>${Number.isFinite(topDrop?.v)?topDrop.v.toFixed(1):"—"}%</b>.`,
+      `El período con menor retención promedio es <b>${lowRet?.per || "—"}</b> con <b>${Number.isFinite(lowRet?.v)?lowRet.v.toFixed(1):"—"}%</b>.`,
+      `La relación asistencia‑nota es <b>${rQual}</b> (correlación ≈ <b>${rTxt}</b>).`,
+      `En los filtros actuales, <b>${highRiskPct.toFixed(1)}%</b> de los grupos están en riesgo alto.`
+    ];
+
+    list.innerHTML = items.map(x=>`<li>${x}</li>`).join("");
+    insightsText = items.map(x=>x.replace(/<[^>]*>/g,"")).join("\n• ");
+
+    // Risk recommendations
+    const reco = [];
+    if(highRiskPct >= 30){
+      reco.push(`Priorizar tutorías y seguimiento en los segmentos con riesgo alto (≥ <b>${highRiskPct.toFixed(1)}%</b>).`);
+    } else {
+      reco.push(`Mantener monitoreo preventivo: el riesgo alto se mantiene en <b>${highRiskPct.toFixed(1)}%</b>.`);
+    }
+    if(Number.isFinite(topDrop?.v) && topDrop.v >= 15){
+      reco.push(`Intervención focalizada en <b>${topDrop.p}</b>: auditoría de módulos, ritmo de evaluación y acompañamiento.`);
+    }
+    if(Number.isFinite(lowRet?.v) && lowRet.v <= 85){
+      reco.push(`Reforzar retención en <b>${lowRet.per}</b>: campañas de motivación, recordatorios y apoyo académico temprano.`);
+    }
+    riskReco.innerHTML = reco.map(x=>`<li>${x}</li>`).join("");
+
+    // Performance recommendations
+    const perf = [];
+    if(Number.isFinite(r) && r >= 0.5){
+      perf.push(`La asistencia parece ser un predictor relevante del rendimiento (correlación <b>${r.toFixed(2)}</b>). Enfatizar estrategias de asistencia.`);
+    } else if(Number.isFinite(r) && r >= 0.2){
+      perf.push(`Relación moderada asistencia‑nota (≈ <b>${r.toFixed(2)}</b>). Combinar asistencia con apoyo académico.`);
+    } else if(Number.isFinite(r)){
+      perf.push(`Relación débil asistencia‑nota (≈ <b>${r.toFixed(2)}</b>). Revisar otros factores (dificultad de módulos, evaluación, soporte).`);
+    } else {
+      perf.push(`No hay suficientes datos para estimar relación asistencia‑nota con los filtros actuales.`);
+    }
+    perf.push(`Promedio actual: retención <b>${Number.isFinite(retAvg)?retAvg.toFixed(1):"—"}%</b> y deserción <b>${Number.isFinite(dropAvg)?dropAvg.toFixed(1):"—"}%</b>.`);
+    perfReco.innerHTML = perf.map(x=>`<li>${x}</li>`).join("");
+  }
+
+  window.copyInsights = async function(){
+    if(!insightsText){
+      alert("No hay insights para copiar todavía.");
+      return;
+    }
+    try{
+      await navigator.clipboard.writeText("• " + insightsText);
+      alert("Insights copiados al portapapeles.");
+    }catch(e){
+      alert("No se pudo copiar automáticamente. Selecciona y copia manualmente.");
+    }
+  }
+
+  // Render all
+  function renderAll(){
+    renderKPIs();
+    renderCharts();
+    renderTable();
+    renderInsights();
+    // Resize visible plots for current tab (important for Plotly when hidden)
+    setTimeout(resizeVisiblePlots, 150);
+  }
+
+  // Exports
+  window.downloadChartPNG = async function(divId){
+    const el=document.getElementById(divId);
+    const url = await Plotly.toImage(el, {format:"png", height: 720, width: 1200, scale:2});
+    const a=document.createElement("a");
+    a.href=url; a.download=`${divId}.png`; a.click();
+  };
+
+  async function exportDashboardPDF(){
+    // export currently visible page (Power BI-like "report page")
+    const activePage = document.querySelector(".page.active");
+    const canvas = await html2canvas(activePage, {backgroundColor:"#f4f6f8", scale:2});
+    const img = canvas.toDataURL("image/png");
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({orientation:"landscape", unit:"pt", format:"a4"});
+    const w = pdf.internal.pageSize.getWidth();
+    const h = pdf.internal.pageSize.getHeight();
+    const imgW = w - 40;
+    const imgH = (canvas.height * imgW) / canvas.width;
+    pdf.addImage(img,"PNG",20,20,imgW,Math.min(imgH, h-40));
+    pdf.save("reporte_retencion_academica.pdf");
+  }
+
+  function downloadJSON(){
+    const blob=new Blob([JSON.stringify(rawData,null,2)], {type:"application/json"});
+    const a=document.createElement("a");
+    a.href=URL.createObjectURL(blob);
+    a.download="csv_convertido_a_json.json";
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+
+  function downloadTemplate(){ window.location.href="plantilla_matricula.csv"; }
+
+  window.downloadTableCSV = function(){
+    const header = ["anio_academico","periodo","programa","estudiantes_matriculados","estudiantes_activos","estudiantes_desertaron","tasa_retencion","tasa_desercion","asistencia_promedio","nota_promedio","riesgo_academico"];
+    const lines = [header.join(",")];
+    filtered.forEach(r=>{
+      const row = [
+        r.anio_academico, r.periodo, `"${String(r.programa).replaceAll('"','""')}"`,
+        r.estudiantes_matriculados, r.estudiantes_activos, r.estudiantes_desertaron,
+        r.tasa_retencion, r.tasa_desercion, r.asistencia_promedio, r.nota_promedio, r.riesgo_academico
+      ];
+      lines.push(row.join(","));
+    });
+    const blob = new Blob([lines.join("\n")], {type:"text/csv;charset=utf-8"});
+    const a=document.createElement("a");
+    a.href=URL.createObjectURL(blob);
+    a.download="matriz_resumen.csv";
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+
+  window.exportTablePNG = async function(){
+    const table = document.querySelector(".tablewrap");
+    const canvas = await html2canvas(table, {backgroundColor:"#ffffff", scale:2});
+    const a=document.createElement("a");
+    a.href=canvas.toDataURL("image/png");
+    a.download="matriz_resumen.png";
+    a.click();
+  }
+
+  // Tabs/pages
+  function showPage(page){
+    document.querySelectorAll(".tab").forEach(t=>t.classList.toggle("active", t.dataset.page===page));
+    document.querySelectorAll(".page").forEach(p=>p.classList.remove("active"));
+    byId(`page-${page}`).classList.add("active");
+    setTimeout(resizeVisiblePlots, 120);
+  }
+
+  function resizeVisiblePlots(){
+    const ids = ["ch_ret","ch_drop_prog","ch_enr_act","ch_heat","ch_risk","ch_scatter"];
+    ids.forEach(id=>{
+      const el = document.getElementById(id);
+      if(!el) return;
+      // only resize if visible (offsetParent check)
+      if(el.offsetParent !== null){
+        try{ Plotly.Plots.resize(el); }catch(e){}
+      }
+    });
+  }
+
+  // Wiring
+  byId("csvFile").addEventListener("change",(e)=>{
+    const f=e.target.files?.[0]; if(f) loadCSVFile(f);
+  });
+  byId("fYear").addEventListener("change", applyFilters);
+  byId("fPeriodo").addEventListener("change", applyFilters);
+  byId("fPrograma").addEventListener("change", applyFilters);
+
+  byId("btnReset").addEventListener("click", ()=>{
+    ["fYear","fPeriodo","fPrograma"].forEach(id=>byId(id).value="__ALL__");
+    applyFilters();
+  });
+
+  byId("btnDownloadJSON").addEventListener("click", downloadJSON);
+  byId("btnTemplate").addEventListener("click", downloadTemplate);
+  byId("btnExportPDF").addEventListener("click", exportDashboardPDF);
+
+  byId("btnLoadSample").addEventListener("click", async ()=>{
+    try{
+      const resp = await fetch("datasheet_desercion_academica_2024_2025_sin_alertas.csv");
+      if(!resp.ok) throw new Error("no-sample");
+      const text = await resp.text();
+      const parsed = Papa.parse(text, {header:true, skipEmptyLines:true});
+      const data = parsed.data || [];
+      const check = analyzeAndValidate(data);
+      if(!check.ok){ setStatus("dataset ejemplo no cumple esquema"); return; }
+      rawData = normalizeTypes(data);
+      filtered = [...rawData];
+      enableUI();
+
+      populateSelect("fYear", uniq(rawData.map(d=>d.anio_academico)).sort(), "Todos los años");
+      populateSelect("fPeriodo", uniq(rawData.map(d=>d.periodo)), "Todos los períodos");
+      populateSelect("fPrograma", uniq(rawData.map(d=>d.programa)), "Todos los programas");
+
+      setStatus("dataset ejemplo cargado ✅");
+      setChips();
+      renderAll();
+    }catch(e){
+      setStatus("no se encontró el ejemplo local; carga tu CSV");
+    }
+  });
+
+  // Tab click
+  document.querySelectorAll(".tab").forEach(btn=>{
+    btn.addEventListener("click", ()=> showPage(btn.dataset.page));
+  });
+
+  // Init
+  disableUI();
+
+  // Small UX: resize on window changes
+  window.addEventListener("resize", ()=> setTimeout(resizeVisiblePlots, 120));
+</script>
+</body>
+</html>
